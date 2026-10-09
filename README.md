@@ -68,6 +68,7 @@ without starting the server).
 |---|---|
 | `npm start` | Run the CMS |
 | `npm run migrate` | Create/upgrade the schema and seed the owner |
+| `npm run owner:reset` | (Re)set the owner login from `.env` or args; invalidates sessions |
 | `npm run import` | Import all 9 collections from the Google Sheet (idempotent) |
 | `npm run smoke` | End-to-end suite; imports `scripts/fixtures/` by default (isolated DB, port 3999) |
 | `npm run contract` | Self-contained PRD §7 contract checks, no network (port 3998) |
@@ -76,6 +77,11 @@ without starting the server).
 ## Project layout
 
 ```
+Dockerfile          container image (Fly.io / Railway / Render / plain Docker)
+fly.toml            Fly.io config: always-on machine + /data volume
+railway.json        Railway build/healthcheck config
+render.yaml         Render blueprint (Docker + /data disk)
+
 server/
   app.js            Express app: routes, static, error handling
   config.js         .env loading + typed config
@@ -88,8 +94,10 @@ server/
     admin.js        auth, owner client management, generic CRUD
 public/             admin UI + landing page (served at / and /admin)
 scripts/            import-from-sheet.mjs · smoke.mjs · contract.mjs · backup.mjs
+                    reset-owner.mjs (recover/rotate the owner login)
 deploy/             Caddyfile · ecosystem.config.cjs · systemd backup units
-docs/               DEPLOY.md (VPS runbook) · INTEGRATION.md (connect a site)
+                    bootstrap.sh (VPS one-shot) · docker-entrypoint.sh
+docs/               DEPLOY.md (deploy runbook) · INTEGRATION.md (connect a site)
 ```
 
 ## Public read API
@@ -168,9 +176,15 @@ $env:SMOKE_LIVE=1; npm run smoke # PowerShell
 
 ## Deployment
 
-Milestone 6 ships the pieces needed for a VPS; see [`deploy/`](./deploy) and the
-step-by-step [`docs/DEPLOY.md`](./docs/DEPLOY.md) runbook (provision → env →
-migrate → PM2 → Caddy → backups → cutover → rollback).
+Two supported paths, both in [`docs/DEPLOY.md`](./docs/DEPLOY.md):
+
+- **Managed container (recommended, lowest ops):** `Dockerfile` + `fly.toml` run
+  the app as one always-on machine with a persistent volume — Fly handles TLS,
+  host patching, and deploy/rollback. The same image runs on Railway/Render.
+- **Plain VPS:** `deploy/bootstrap.sh` provisions Node, PM2, Caddy (TLS),
+  migration, and nightly backups on a fresh Ubuntu/Debian server.
+
+The VPS pieces it installs:
 
 1. **Reverse proxy** — `deploy/Caddyfile` (edit the domain). Caddy provisions TLS.
 2. **Process manager** — `pm2 start deploy/ecosystem.config.cjs` then

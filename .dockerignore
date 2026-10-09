@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+data
+backups
+logs
+.env
+*.db
+*.db-wal
+*.db-shm
+npm-debug.log*
+docs
+PRD.md
+DESIGN.md
+README.md

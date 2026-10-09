@@ -1,0 +1,51 @@
+# Sabi CMS — Fly.io deployment: one always-on machine + a persistent volume.
+# Runbook: docs/DEPLOY.md -> "Managed container (Fly.io)".
+#
+#   fly apps create sabi-cms
+#   fly volumes create sabi_data --size 1 --region lhr
+#   fly secrets set HMAC_SECRET=... OWNER_EMAIL=... OWNER_PASSWORD=... BACKUP_PASSPHRASE=...
+#   fly deploy
+#
+# Change `app` and `primary_region` (lhr / fra / iad / jnb ...) to suit the client.
+
+app = "sabi-cms"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DB_PATH = "/data/cms.db"
+  BACKUP_DIR = "/data/backups"
+  BACKUP_KEEP = "14"
+
+# SQLite + uploads persist here; survives deploys and restarts.
+[[mounts]]
+  source = "sabi_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # A CMS that a client may open at any time: never scale to zero.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

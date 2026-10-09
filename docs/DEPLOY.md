@@ -33,6 +33,97 @@ equivalent and the reference for every value.
 
 ---
 
+## Managed container (Fly.io) — recommended, lowest ops
+
+`Dockerfile` + `fly.toml` run the same app as one always-on machine with a
+persistent volume for the SQLite DB and backups. Fly terminates TLS (no Caddy),
+patches the host, and gives you `fly deploy` / `fly releases rollback`. The
+volume auto-snapshots daily; off-box copies come from `scripts/backup.mjs`.
+
+The same image runs on Railway, Render, or any Docker host — mount a volume at
+`/data` (the image defaults `DB_PATH=/data/cms.db`, `BACKUP_DIR=/data/backups`).
+
+1. **Install + log in:** `fly auth login` (and `flyctl launch` is *not* needed —
+   `fly.toml` already exists).
+
+2. **Set the app + region** in `fly.toml` (`app`, `primary_region`), then create it:
+
+   ```bash
+   fly apps create <app>
+   fly volumes create sabi_data --size 1 --region <region>
+   ```
+
+3. **Secrets** (never committed; the rest comes from `fly.toml [env]`):
+
+   ```bash
+   fly secrets set \
+     HMAC_SECRET="$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")" \
+     OWNER_EMAIL=owner@example.com \
+     OWNER_PASSWORD='a-strong-password' \
+     BACKUP_PASSPHRASE="$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")"
+   ```
+
+4. **Deploy, then add the domain.** `migrate` runs automatically on boot.
+
+   ```bash
+   fly deploy
+   fly certs add cms.giftsbyvf.com      # follow the DNS records it prints
+   ```
+
+5. **Verify:** `fly open /health` (or
+   `curl -sI https://cms.giftsbyvf.com/health`), then create the Gift by VF
+   client (step 9 below) and run the storefront cutover (steps 10-11).
+
+6. **Backups.** Fly snapshots the `sabi_data` volume daily. For an encrypted,
+   portable copy off the box:
+
+   ```bash
+   fly ssh console -u node -C "cd /app && node scripts/backup.mjs"
+   fly sftp get /data/backups/<file>.db.enc
+   ```
+
+   Restore with `node scripts/backup.mjs --decrypt <file>.db.enc` after copying
+   the plaintext back to `DB_PATH`. Keep a copy somewhere other than Fly.
+
+7. **Rollback:** `fly releases` then `fly releases rollback <version>`. The
+   volume (and SQLite file) is untouched by deploys.
+
+> `fly.toml` pins `auto_stop_machines = false` and `min_machines_running = 1` so
+> the admin and read API are always responsive; SQLite cannot scale to zero.
+
+### Railway or Render instead
+
+The same `Dockerfile` runs on both — only the `/data` volume and the secrets
+change.
+
+- **Railway:** `railway.json` is committed. Create a project from this repo, add
+  a **Volume** mounted at `/data`, set the four secrets (`HMAC_SECRET`,
+  `OWNER_EMAIL`, `OWNER_PASSWORD`, `BACKUP_PASSPHRASE`), and deploy. Railway
+  injects `PORT`.
+- **Render:** `render.yaml` is committed — create a **Blueprint** from this repo
+  and set the same four secrets in the dashboard. Persistent disks require a
+  paid instance type (not Free).
+
+### Resetting the owner login
+
+`migrate` seeds the owner from `OWNER_EMAIL`/`OWNER_PASSWORD` **once** and never
+overwrites it, so changing the password in `.env` afterwards has no effect. To
+recover or rotate the owner credentials:
+
+```bash
+npm run owner:reset                       # uses .env OWNER_EMAIL / OWNER_PASSWORD
+npm run owner:reset owner@x.com 'new-pw'  # explicit
+```
+
+This invalidates all existing sessions. There is intentionally no self-service
+sign-up: the owner is seeded from `.env` and creates each client's login in the
+dashboard.
+
+The remaining sections are the manual VPS path — use them if you prefer a plain
+server over a managed host.
+
+---
+
 ## 0. Prerequisites
 
 - A VPS (1 vCPU / 1 GB RAM is enough) with a public IP and sudo access.
@@ -223,3 +314,4 @@ and deploy. Full integration recipe: [`INTEGRATION.md`](./INTEGRATION.md).
 | CORS blocked on the storefront | `allowed_origin` mismatch (scheme/host/port) | fix it in the owner dashboard |
 | `subscription_inactive` unexpectedly | client paused | re-activate in the owner dashboard |
 | Backup job fails | `BACKUP_PASSPHRASE`/`BACKUP_DIR` unset or unwritable | check the EnvironmentFile and directory perms |
+| Owner login rejected | `OWNER_PASSWORD` changed after the owner was seeded | run `npm run owner:reset` |

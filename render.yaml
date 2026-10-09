@@ -1,0 +1,33 @@
+# Render blueprint (https://render.com/docs/blueprint-spec).
+#
+# Requires a paid instance type — persistent disks are not available on Free.
+# Secrets are marked `sync: false`, so set them in the Render dashboard:
+#   HMAC_SECRET, OWNER_EMAIL, OWNER_PASSWORD, BACKUP_PASSPHRASE.
+# Everything else (NODE_ENV / PORT / DB_PATH / BACKUP_DIR) is baked in or set here.
+services:
+  - type: web
+    name: sabi-cms
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /data/cms.db
+      - key: BACKUP_DIR
+        value: /data/backups
+      - key: BACKUP_KEEP
+        value: "14"
+      - key: HMAC_SECRET
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: BACKUP_PASSPHRASE
+        sync: false
+    disk:
+      name: sabi-data
+      mountPath: /data
+      sizeGB: 1

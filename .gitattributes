@@ -1,0 +1,10 @@
+# Keep shell scripts and the Dockerfile LF so they run in Linux containers/VPS
+# even when the repo is checked out on Windows.
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
