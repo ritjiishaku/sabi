@@ -1,0 +1,23 @@
+{
+  "name": "sabi-cms",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted multi-client content CMS with a read-only REST API",
+  "scripts": {
+    "start": "node server/app.js",
+    "migrate": "node server/migrate.js",
+    "import": "node scripts/import-from-sheet.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "contract": "node scripts/contract.mjs",
+    "backup": "node scripts/backup.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^12.4.1",
+    "express": "^5.1.0"
+  }
+}

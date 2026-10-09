@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the Sabi CMS backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
+# Install:
+#   cp deploy/sabi-backup.service deploy/sabi-backup.timer /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now sabi-backup.timer
+#   systemctl list-timers sabi-backup.timer

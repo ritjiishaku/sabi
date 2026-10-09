@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sign in · Sabi CMS</title>
+<link rel="stylesheet" href="css/design-tokens.css" />
+<link rel="stylesheet" href="css/admin.css" />
+<script>(function(){try{var t=localStorage.getItem('sabi-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+</head>
+<body>
+<div class="login-wrap">
+  <button class="btn sm icon-btn theme-float" data-theme-toggle type="button" aria-pressed="false" aria-label="Switch theme">
+    <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+  <form class="login-box" id="loginForm">
+    <div class="brand"><span class="mark">S</span> <span id="brand">Sabi CMS</span></div>
+    <div class="msg" id="msg"></div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+    </div>
+    <button class="btn primary" type="submit" id="submitBtn">Sign in</button>
+  </form>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/theme.js"></script>
+<script>
+fetch('/health').then((r) => r.json()).then((d) => {
+  if (d.brand) { document.getElementById('brand').textContent = d.brand; document.title = `Sign in · ${d.brand}`; }
+}).catch(() => {});
+
+const msg = document.getElementById('msg');
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearMsg(msg);
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  try {
+    await api.login(document.getElementById('email').value, document.getElementById('password').value);
+    location.href = 'dashboard.html';
+  } catch (err) {
+    const map = {
+      invalid_credentials: 'Wrong email or password.',
+      too_many_attempts: 'Too many attempts. Wait 15 minutes and try again.',
+      subscription_inactive: 'This site is paused. Contact the site owner.',
+    };
+    showMsg(msg, 'error', map[err.message] || 'Sign-in failed. Please try again.');
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

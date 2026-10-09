@@ -1,0 +1,6 @@
+name,price,description,category,subcategory,product_type,occasion,image_url,video_url,material,size,turnaround,delivery_notes,payment_terms,sales_caption,icon,stock_label,display_order,is_visible,featured,in_stock
+Silk Scarf,25000,Soft silk,Accessories,Scarves,Gift,Birthday,https://example.com/scarf.jpg,,,,,,,scarf,,,1,TRUE,TRUE,TRUE
+Silk Scarf,25000,Soft silk,Accessories,Scarves,Gift,Birthday,https://example.com/scarf.jpg,,,,,,,scarf,,,1,TRUE,TRUE,TRUE
+Range Price,"₦20,000 - ₦30,000",Pricey,,,,,,,,,,,,,,,,TRUE,FALSE,TRUE
+Enlargement Print,20000,Big print,Picture Enlargement,,,Gift,,https://example.com/print.jpg,,,A4,,,,,,,2,true,false,yes
+Sold Out Bowl,15000,,,,,,,,,,,,,,,,,3,TRUE,FALSE,0

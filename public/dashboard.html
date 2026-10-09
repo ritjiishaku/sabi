@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard · Sabi CMS</title>
+<link rel="stylesheet" href="css/design-tokens.css" />
+<link rel="stylesheet" href="css/admin.css" />
+<script>(function(){try{var t=localStorage.getItem('sabi-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mark">S</span> <span id="brand">Sabi CMS</span></div>
+  <div class="who">
+    <span id="whoami"></span>
+    <button class="btn sm icon-btn" data-theme-toggle type="button" aria-pressed="false" aria-label="Switch theme">
+      <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="btn sm" id="pwBtn">Password</button>
+    <button class="btn sm" id="logoutBtn">Sign out</button>
+  </div>
+</header>
+<main id="view"></main>
+
+<script src="js/api.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>

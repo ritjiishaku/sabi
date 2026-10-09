@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sabi CMS — Content that powers your storefront</title>
+<meta name="description" content="A self-hosted, multi-client CMS with a read-only REST API. Your content, your site, one login." />
+<link rel="stylesheet" href="css/design-tokens.css" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    line-height: var(--line-base);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  .container { width: 100%; max-width: 1120px; margin: 0 auto; padding-inline: clamp(24px, 6vw, 48px); }
+
+  /* ---------- Nav ---------- */
+  header {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 50;
+    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .nav { position: relative; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+
+  .logo {
+    display: flex; align-items: center; gap: var(--spacing-2);
+    font-weight: var(--font-weight-semibold); font-size: var(--font-size-md); letter-spacing: 0.02em;
+  }
+
+  .logo .mark {
+    width: 28px; height: 28px; border-radius: var(--radius-md);
+    background: var(--color-primary-600); display: grid; place-items: center;
+    color: #fff; font-size: 0.9rem; font-weight: var(--font-weight-bold);
+  }
+
+  /* Hamburger (mobile) */
+  .nav-toggle {
+    display: inline-flex; flex-direction: column; justify-content: center; gap: 5px;
+    width: 44px; height: 44px; padding: 10px;
+    border: 1px solid var(--border-default); border-radius: var(--radius-md);
+    background: var(--bg-surface); cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+  }
+  .nav-toggle:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
+  .nav-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 45%, transparent); }
+  .nav-toggle span {
+    display: block; height: 2px; width: 100%; border-radius: 2px; background: var(--text-primary);
+    transition: transform var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
+  }
+  .nav-toggle.is-open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .nav-toggle.is-open span:nth-child(2) { opacity: 0; }
+  .nav-toggle.is-open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .nav-menu {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+    display: none; flex-direction: column; gap: var(--spacing-2);
+    padding: var(--spacing-4);
+    background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-lg);
+  }
+  .nav-menu.is-open { display: flex; }
+  .nav-menu .btn { width: 100%; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-2);
+    min-height: 44px; padding: 0 var(--spacing-5); border-radius: var(--radius-md);
+    font-size: var(--font-size-base); font-weight: var(--font-weight-medium);
+    border: 1px solid transparent; cursor: pointer; text-align: center;
+    transition: background var(--motion-fast) var(--ease-standard),
+                border-color var(--motion-fast) var(--ease-standard),
+                color var(--motion-fast) var(--ease-standard),
+                transform var(--motion-fast) var(--ease-standard);
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 45%, transparent); }
+
+  .btn-primary { background: var(--color-primary-700); color: var(--text-inverse); }
+  .btn-primary:hover { background: var(--color-primary-800); }
+
+  .btn-ghost { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border-default); }
+  .btn-ghost:hover { background: var(--bg-subtle); border-color: var(--border-strong); color: var(--text-primary); }
+
+  .nav .btn { min-height: 38px; padding: 0 var(--spacing-4); }
+
+  /* ---------- Hero (single screen, 100vh) ---------- */
+  .hero {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    align-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 84px 0 40px;
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border-subtle) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, #000 30%, transparent 75%);
+    pointer-events: none;
+  }
+
+  .hero::after {
+    content: "";
+    position: absolute;
+    width: 620px;
+    height: 620px;
+    top: -180px;
+    right: -160px;
+    background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-400) 22%, transparent), transparent 65%);
+    pointer-events: none;
+  }
+
+  .hero-inner {
+    position: relative; z-index: 1; display: grid; grid-template-columns: 1fr;
+    gap: var(--spacing-8); align-items: center; width: 100%;
+  }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: var(--spacing-2);
+    padding: 6px var(--spacing-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-full);
+    background: var(--bg-surface); font-size: var(--font-size-xs); color: var(--text-secondary);
+    letter-spacing: 0.04em; text-transform: uppercase; font-weight: var(--font-weight-medium);
+  }
+
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 8px color-mix(in srgb, var(--color-success) 60%, transparent); }
+
+  h1 {
+    font-size: clamp(2.2rem, 6vw, 3.75rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    margin: var(--spacing-5) 0 var(--spacing-4);
+    font-weight: var(--font-weight-bold);
+  }
+
+  h1 .grad {
+    background: linear-gradient(120deg, var(--color-primary-500), var(--color-tertiary-500));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .lede { font-size: clamp(1rem, 1.6vw, 1.15rem); line-height: 1.7; color: var(--text-muted); max-width: 34rem; margin-bottom: var(--spacing-6); }
+
+  .features { display: flex; flex-wrap: wrap; gap: var(--spacing-3) var(--spacing-6); margin-bottom: var(--spacing-8); }
+  .feature { display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm); color: var(--text-secondary); font-weight: var(--font-weight-medium); }
+  .feature svg { width: 18px; height: 18px; flex: none; color: var(--color-primary-700); }
+
+  .cta-row { display: flex; gap: var(--spacing-3); flex-wrap: wrap; }
+
+  /* ---------- API card ---------- */
+  .api-card {
+    display: none;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .api-head { display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-3) var(--spacing-4); background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); }
+  .api-head i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .api-head i:nth-child(1) { background: var(--color-primary-300); }
+  .api-head i:nth-child(2) { background: var(--color-neutral-300); }
+  .api-head i:nth-child(3) { background: var(--color-neutral-200); }
+
+  .api-head .url { margin-left: var(--spacing-2); font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .api-body { padding: var(--spacing-5); font-family: var(--font-mono); font-size: var(--font-size-sm); line-height: 1.75; overflow-x: auto; color: var(--text-secondary); }
+  .api-body .method { color: var(--color-success); }
+  .api-body .path { color: var(--color-primary-700); }
+  .api-body .key { color: var(--color-tertiary-600); }
+  .api-body .str { color: var(--color-primary-800); }
+  .api-body .cm { color: var(--text-muted); }
+
+  .api-foot { display: flex; justify-content: space-between; padding: var(--spacing-3) var(--spacing-5); border-top: 1px solid var(--border-subtle); font-size: var(--font-size-xs); color: var(--text-muted); font-family: var(--font-mono); }
+  .api-foot .ok { color: var(--color-primary-700); }
+
+  /* ---------- Desktop enhancements (mobile first) ---------- */
+  @media (min-width: 900px) {
+    .hero { padding: 0; }
+    .hero-inner { grid-template-columns: 1.1fr 0.9fr; gap: var(--spacing-16); }
+    .api-card { display: block; }
+    .nav-toggle { display: none; }
+    .nav-menu {
+      position: static; display: flex; flex-direction: row; gap: var(--spacing-2);
+      padding: 0; background: transparent; border: none; box-shadow: none;
+    }
+    .nav-menu .btn { width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container nav">
+    <a class="logo" href="/"><span class="mark">S</span> <span data-brand>Sabi CMS</span></a>
+    <button class="nav-toggle" id="navToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navMenu">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-menu" id="navMenu">
+      <a class="btn btn-ghost" href="/admin/login.html">Sign in</a>
+      <a class="btn btn-primary" href="/admin/login.html">Get started</a>
+    </div>
+  </div>
+</header>
+
+<!-- ================= HERO (single 100vh screen) ================= -->
+<section class="hero">
+  <div class="container hero-inner">
+    <div>
+      <span class="pill"><span class="dot"></span> Now in MVP — invite only</span>
+      <h1>Your content.<br />Your site.<br /><span class="grad">One clean API.</span></h1>
+      <p class="lede">
+        Sabi CMS replaces the shared spreadsheet with a self-hosted, multi-client CMS.
+        Give every client a login, keep every site on a fast read-only REST API — and
+        never touch a row of HTML to update content again.
+      </p>
+
+      <div class="features">
+        <span class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+          </svg>
+          One-file database
+        </span>
+        <span class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+          Read-only REST API
+        </span>
+        <span class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          Self-hosted &amp; private
+        </span>
+      </div>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/admin/login.html">
+          Start your storefront
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+        </a>
+        <a class="btn btn-ghost" href="/admin/login.html">Sign in</a>
+      </div>
+    </div>
+
+    <div class="api-card" aria-hidden="true">
+      <div class="api-head">
+        <i></i><i></i><i></i>
+        <span class="url">GET /api/v1/sites/gifts-by-vf/content/products</span>
+      </div>
+      <div class="api-body">
+<span class="cm">// every value is a string — exactly like the sheet</span><br />
+{<br />
+&nbsp;&nbsp;<span class="key">"name"</span>: <span class="str">"Customized Name Necklace"</span>,<br />
+&nbsp;&nbsp;<span class="key">"price"</span>: <span class="str">"25000"</span>,<br />
+&nbsp;&nbsp;<span class="key">"image_url"</span>: <span class="str">"https://…/necklace.jpg"</span>,<br />
+&nbsp;&nbsp;<span class="key">"category"</span>: <span class="str">"Customized Jewelry"</span>,<br />
+&nbsp;&nbsp;<span class="key">"is_visible"</span>: <span class="str">"TRUE"</span>,<br />
+&nbsp;&nbsp;<span class="key">"featured"</span>: <span class="str">"1"</span>,<br />
+&nbsp;&nbsp;<span class="key">"in_stock"</span>: <span class="str">"true"</span><br />
+}
+      </div>
+      <div class="api-foot">
+        <span><span class="method">200</span> · application/json</span>
+        <span class="ok">max-age=60</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  /* mobile hamburger menu */
+  (function () {
+    const toggle = document.getElementById('navToggle');
+    const menu = document.getElementById('navMenu');
+    if (!toggle || !menu) return;
+    const setOpen = (open) => {
+      menu.classList.toggle('is-open', open);
+      toggle.classList.toggle('is-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    };
+    toggle.addEventListener('click', () => setOpen(!menu.classList.contains('is-open')));
+    menu.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(false); });
+    document.addEventListener('click', (e) => {
+      if (!menu.classList.contains('is-open')) return;
+      if (menu.contains(e.target) || toggle.contains(e.target)) return;
+      setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+    window.matchMedia('(min-width: 900px)').addEventListener('change', (e) => { if (e.matches) setOpen(false); });
+  })();
+
+  /* connect to the running CMS: use its configured brand name everywhere */
+  fetch('/health').then((r) => r.json()).then((d) => {
+    if (!d.brand || d.brand === 'Sabi CMS') return;
+    document.querySelectorAll('[data-brand]').forEach((el) => { el.textContent = d.brand; });
+    document.querySelector('.logo .mark') && (document.querySelector('.logo .mark').textContent = d.brand.charAt(0).toUpperCase());
+    document.title = d.brand + ' — Content that powers your storefront';
+  }).catch(() => {});
+</script>
+
+</body>
+</html>

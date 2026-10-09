@@ -1,0 +1,13 @@
+[Unit]
+Description=Sabi CMS nightly encrypted SQLite backup
+Documentation=https://github.com/your-org/sabi-cms
+After=network.target
+
+[Service]
+Type=oneshot
+# Adjust User/WorkingDirectory/EnvironmentFile to your deployment.
+User=sabi
+WorkingDirectory=/opt/sabi-cms
+EnvironmentFile=/opt/sabi-cms/.env
+# BACKUP_PASSPHRASE should live in the EnvironmentFile (off-box copy must stay encrypted).
+ExecStart=/usr/bin/node /opt/sabi-cms/scripts/backup.mjs
