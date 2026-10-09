@@ -1,6 +1,6 @@
 # Sabi CMS — production reverse proxy (PRD §9, milestone 6)
 #
-# Replace cms.example.com with your domain. Caddy provisions and renews TLS
+# Production domain for Gift by VF. Caddy provisions and renews TLS
 # automatically (Let's Encrypt). The Node app listens on 127.0.0.1:3000 and
 # trusts the forwarded headers, so session cookies are marked Secure in prod.
 #
@@ -8,7 +8,7 @@
 #   caddy run --config deploy/Caddyfile
 #   (systemd: install as /etc/caddy/Caddyfile and `systemctl reload caddy`)
 
-cms.example.com {
+cms.giftsbyvf.com {
 	encode gzip zstd
 
 	header {
