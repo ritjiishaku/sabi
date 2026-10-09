@@ -15,6 +15,24 @@ The Node app always listens on `127.0.0.1:3000`; **only Caddy is exposed**.
 
 ---
 
+## Fast path (automated)
+
+`deploy/bootstrap.sh` runs steps 1-8 below on a fresh Ubuntu/Debian VPS. The DNS
+A record must already point at the server.
+
+```bash
+sudo DOMAIN=cms.giftsbyvf.com \
+     OWNER_EMAIL=owner@example.com OWNER_PASSWORD='a-strong-password' \
+     bash deploy/bootstrap.sh
+```
+
+Add `WITH_IMPORT=1` to also seed content from the Google Sheet. It generates
+`HMAC_SECRET` and `BACKUP_PASSPHRASE`, keeps any existing `.env`, and is safe to
+re-run (it pulls instead of re-cloning). The sections below are the manual
+equivalent and the reference for every value.
+
+---
+
 ## 0. Prerequisites
 
 - A VPS (1 vCPU / 1 GB RAM is enough) with a public IP and sudo access.
