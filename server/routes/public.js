@@ -6,8 +6,8 @@ import { slugify } from '../lib/slugify.js';
 
 export const publicRouter = Router();
 
-publicRouter.use('/sites/:siteSlug', (req, res, next) => {
-  const site = db.prepare('SELECT * FROM sites WHERE slug = ?').get(req.params.siteSlug);
+publicRouter.use('/sites/:siteSlug', async (req, res, next) => {
+  const site = await db.prepare('SELECT * FROM sites WHERE slug = ?').get(req.params.siteSlug);
   if (!site) return res.status(404).json({ error: 'site_not_found' });
   if (!site.is_active) {
     res.set('Cache-Control', 'no-store');
@@ -26,8 +26,8 @@ function applyCors(req, res) {
   }
 }
 
-publicRouter.options('/sites/:siteSlug/*splat', (req, res) => {
-  const site = db.prepare('SELECT * FROM sites WHERE slug = ?').get(req.params.siteSlug);
+publicRouter.options('/sites/:siteSlug/*splat', async (req, res) => {
+  const site = await db.prepare('SELECT * FROM sites WHERE slug = ?').get(req.params.siteSlug);
   if (!site || !site.is_active) return res.sendStatus(403);
   const origin = req.headers.origin;
   if (origin && site.allowed_origin && origin !== site.allowed_origin) {
@@ -43,7 +43,7 @@ publicRouter.options('/sites/:siteSlug/*splat', (req, res) => {
 
 const ORDER_BY = '(display_order IS NULL), display_order, id';
 
-publicRouter.get('/sites/:siteSlug/content/:collection', (req, res) => {
+publicRouter.get('/sites/:siteSlug/content/:collection', async (req, res) => {
   const { collection } = req.params;
   if (!isCollection(collection)) return res.status(404).json({ error: 'unknown_collection' });
   applyCors(req, res);
@@ -52,27 +52,27 @@ publicRouter.get('/sites/:siteSlug/content/:collection', (req, res) => {
   const col = COLLECTIONS[collection];
   let rows;
   if (col.kind === 'kv') {
-    rows = db
+    rows = (await db
       .prepare(`SELECT key, value FROM ${col.table} WHERE site_id = ? ORDER BY key`)
-      .all(req.site.id)
+      .all(req.site.id))
       .map((r) => stringifyRow(r, ['key', 'value']));
   } else {
     const cols = col.publicColumns.join(', ');
     const order = col.publicColumns.includes('display_order') ? ` ORDER BY ${ORDER_BY}` : '';
-    rows = db
+    rows = (await db
       .prepare(`SELECT ${cols} FROM ${col.table} WHERE site_id = ?${order}`)
-      .all(req.site.id)
+      .all(req.site.id))
       .map((r) => stringifyRow(r, col.publicColumns));
   }
   res.json(rows);
 });
 
-publicRouter.get('/sites/:siteSlug/products/:slug', (req, res) => {
+publicRouter.get('/sites/:siteSlug/products/:slug', async (req, res) => {
   applyCors(req, res);
   res.set('Cache-Control', 'public, max-age=60');
 
   const col = COLLECTIONS.products;
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT ${col.publicColumns.join(', ')} FROM ${col.table}
        WHERE site_id = ? ORDER BY ${ORDER_BY}`

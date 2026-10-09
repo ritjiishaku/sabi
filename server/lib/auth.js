@@ -51,11 +51,11 @@ export function getSession(req) {
   return verifySigned(token);
 }
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'unauthorized' });
   // A password change bumps session_version, retiring every token issued before it.
-  const user = db.prepare('SELECT id, session_version FROM users WHERE id = ?').get(session.uid);
+  const user = await db.prepare('SELECT id, session_version FROM users WHERE id = ?').get(session.uid);
   if (!user || (user.session_version ?? 0) !== (session.sv ?? 0)) {
     return res.status(401).json({ error: 'unauthorized' });
   }

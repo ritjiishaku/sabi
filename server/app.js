@@ -1,16 +1,25 @@
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { config } from './config.js';
 import { migrate } from './migrate.js';
 import { publicRouter } from './routes/public.js';
 import { adminRouter } from './routes/admin.js';
 
-migrate();
+/* Run schema/seed migration once per process. Every request awaits this promise,
+   which matters on serverless where the module is loaded on a cold start. */
+const ready = migrate();
+ready.catch(() => {});
 
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
 app.use(express.json({ limit: '1mb' }));
+
+app.use(async (req, res, next) => {
+  try { await ready; next(); } catch (err) { next(err); }
+});
 
 /* structured request logging */
 app.use((req, res, next) => {
@@ -57,14 +66,15 @@ app.use('/api/admin', (req, res, next) => {
 app.use('/api/v1', publicRouter);
 app.use('/api/admin', adminRouter);
 
-/* landing page (explicit root route — the repo root is never served) */
-app.get('/', (req, res) => res.sendFile(path.join(config.root, 'public', 'index.html')));
+/* static assets (landing page + admin UI). Fall back to cwd/public for hosts
+   that place the bundle elsewhere. */
+const publicDir = fs.existsSync(path.join(config.root, 'public'))
+  ? path.join(config.root, 'public')
+  : path.join(process.cwd(), 'public');
 
-/* shared design assets used by the landing page */
-app.use('/css', express.static(path.join(config.root, 'public', 'css')));
-
-/* admin UI */
-app.use('/admin', express.static(path.join(config.root, 'public')));
+app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.use('/css', express.static(path.join(publicDir, 'css')));
+app.use('/admin', express.static(publicDir));
 app.get('/admin', (req, res) => res.redirect('/admin/login.html'));
 
 /* structured errors */
@@ -75,6 +85,22 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: status >= 500 ? 'internal_error' : err.message || 'error' });
 });
 
-app.listen(config.port, () => {
-  console.log(`[${config.brandName}] listening on http://localhost:${config.port} (env: ${process.env.NODE_ENV || 'development'})`);
-});
+/* Only start a listener when run directly (CLI/local). On Vercel the module is
+   imported and the exported app handles invocations instead. */
+const isDirectRun = process.argv[1]
+  && import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, '/')}`).href;
+
+if (isDirectRun && !process.env.VERCEL) {
+  ready
+    .then(() => {
+      app.listen(config.port, () => {
+        console.log(`[${config.brandName}] listening on http://localhost:${config.port} (env: ${process.env.NODE_ENV || 'development'})`);
+      });
+    })
+    .catch((e) => {
+      console.error(`[app] startup failed: ${e.message}`);
+      process.exit(1);
+    });
+}
+
+export default app;

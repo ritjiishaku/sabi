@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS users (
   session_version INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  reset_at INTEGER NOT NULL
+);
 `;
 
 function columnType(name) {
@@ -28,15 +33,14 @@ function columnType(name) {
   return 'TEXT';
 }
 
-export function migrate() {
-  db.exec(DDL);
+export async function migrate() {
+  await db.exec(DDL);
 
   /* additive column upgrades for databases created before the column existed */
-  const ensureColumn = (table, column, ddl) => {
-    const exists = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
-    if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
-  };
-  ensureColumn('users', 'session_version', 'session_version INTEGER NOT NULL DEFAULT 0');
+  const users = await db.prepare('PRAGMA table_info(users)').all();
+  if (!users.some((c) => c.name === 'session_version')) {
+    await db.exec('ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0');
+  }
 
   for (const [name, col] of Object.entries(COLLECTIONS)) {
     const cols = ['id INTEGER PRIMARY KEY AUTOINCREMENT', 'site_id INTEGER NOT NULL REFERENCES sites(id)'];
@@ -45,17 +49,17 @@ export function migrate() {
     } else {
       for (const f of col.fields) cols.push(`${f.name} ${columnType(f.name)}`);
     }
-    db.exec(`CREATE TABLE IF NOT EXISTS ${col.table} (
+    await db.exec(`CREATE TABLE IF NOT EXISTS ${col.table} (
       ${cols.join(',\n      ')}
     );`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_${col.table}_site ON ${col.table}(site_id);`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_${col.table}_site ON ${col.table}(site_id);`);
   }
 
   if (config.ownerEmail && config.ownerPassword) {
-    const existing = db.prepare('SELECT id FROM users WHERE role = ?').get('owner');
+    const existing = await db.prepare('SELECT id FROM users WHERE role = ?').get('owner');
     if (!existing) {
       const hash = bcrypt.hashSync(config.ownerPassword, 10);
-      db.prepare('INSERT INTO users (site_id, email, password_hash, role) VALUES (NULL, ?, ?, ?)')
+      await db.prepare('INSERT INTO users (site_id, email, password_hash, role) VALUES (NULL, ?, ?, ?)')
         .run(config.ownerEmail, hash, 'owner');
       console.log(`[migrate] seeded owner account: ${config.ownerEmail}`);
     }
@@ -65,6 +69,13 @@ export function migrate() {
 }
 
 if (import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, '/')}`).href) {
-  const res = migrate();
-  console.log(`[migrate] OK — ${res.collections} collections, ${res.settingsKeys} settings keys`);
+  migrate()
+    .then((res) => {
+      console.log(`[migrate] OK — ${res.collections} collections, ${res.settingsKeys} settings keys`);
+      return db.close();
+    })
+    .catch((e) => {
+      console.error(`[migrate] ERROR: ${e.message}`);
+      process.exit(1);
+    });
 }

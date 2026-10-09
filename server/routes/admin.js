@@ -18,22 +18,22 @@ function userById(id) {
 
 /* ----------------------------- auth ----------------------------- */
 
-adminRouter.post('/login', (req, res) => {
+adminRouter.post('/login', async (req, res) => {
   const email = cell(req.body?.email).toLowerCase();
   const password = String(req.body?.password ?? '');
   if (!email || !password) return res.status(400).json({ error: 'email_password_required' });
 
   const ip = req.ip || 'unknown';
-  if (hit(`login:${ip}:${email}`, 10, 15 * 60 * 1000)) {
+  if (await hit(`login:${ip}:${email}`, 10, 15 * 60 * 1000)) {
     return res.status(429).json({ error: 'too_many_attempts', retry_after_minutes: 15 });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email);
+  const user = await db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email);
   if (!user || !verifyPassword(password, user.password_hash)) {
     return res.status(401).json({ error: 'invalid_credentials' });
   }
   if (user.role === 'client') {
-    const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(user.site_id);
+    const site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(user.site_id);
     if (site && !site.is_active) return res.status(403).json({ error: 'subscription_inactive' });
   }
 
@@ -46,37 +46,37 @@ adminRouter.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.post('/change-password', requireAuth, (req, res) => {
+adminRouter.post('/change-password', requireAuth, async (req, res) => {
   const current = String(req.body?.current_password ?? '');
   const next = String(req.body?.new_password ?? '');
   if (!current || !next) return res.status(400).json({ error: 'current_and_new_required' });
   if (next.length < 8) return res.status(400).json({ error: 'password_too_short' });
 
   const ip = req.ip || 'unknown';
-  if (hit(`chpw:${ip}:${req.session.uid}`, 10, 15 * 60 * 1000)) {
+  if (await hit(`chpw:${ip}:${req.session.uid}`, 10, 15 * 60 * 1000)) {
     return res.status(429).json({ error: 'too_many_attempts', retry_after_minutes: 15 });
   }
 
-  const user = db.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(req.session.uid);
+  const user = await db.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(req.session.uid);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
   if (!verifyPassword(current, user.password_hash)) return res.status(401).json({ error: 'invalid_password' });
 
-  db.prepare('UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?').run(hashPassword(next), user.id);
-  const fresh = db.prepare('SELECT id, site_id, email, role, session_version FROM users WHERE id = ?').get(user.id);
+  await db.prepare('UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?').run(hashPassword(next), user.id);
+  const fresh = await db.prepare('SELECT id, site_id, email, role, session_version FROM users WHERE id = ?').get(user.id);
   res.set('Set-Cookie', sessionCookie(createSession(fresh)));
   res.json({ ok: true });
 });
 
-adminRouter.get('/me', requireAuth, (req, res) => {
-  const user = userById(req.session.uid);
+adminRouter.get('/me', requireAuth, async (req, res) => {
+  const user = await userById(req.session.uid);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
   let site = null;
-  if (user.site_id) site = db.prepare('SELECT id, slug, name, allowed_origin, is_active FROM sites WHERE id = ?').get(user.site_id);
+  if (user.site_id) site = await db.prepare('SELECT id, slug, name, allowed_origin, is_active FROM sites WHERE id = ?').get(user.site_id);
   res.json({ ...user, site });
 });
 
-adminRouter.get('/meta', requireAuth, (req, res) => {
-  const user = userById(req.session.uid);
+adminRouter.get('/meta', requireAuth, async (req, res) => {
+  const user = await userById(req.session.uid);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
   res.json({
     brand: config.brandName,
@@ -94,18 +94,18 @@ adminRouter.get('/meta', requireAuth, (req, res) => {
 
 /* --------------------------- owner: clients --------------------------- */
 
-adminRouter.get('/clients', requireAuth, requireOwner, (req, res) => {
-  const sites = db.prepare('SELECT * FROM sites ORDER BY id').all();
-  const out = sites.map((s) => ({
+adminRouter.get('/clients', requireAuth, requireOwner, async (req, res) => {
+  const sites = await db.prepare('SELECT * FROM sites ORDER BY id').all();
+  const out = await Promise.all(sites.map(async (s) => ({
     ...s,
     is_active: s.is_active ? 'TRUE' : 'FALSE',
-    client_email: db.prepare('SELECT email FROM users WHERE site_id = ? AND role = ?').get(s.id, 'client')?.email ?? '',
-    product_count: db.prepare('SELECT COUNT(*) AS n FROM products WHERE site_id = ?').get(s.id).n,
-  }));
+    client_email: (await db.prepare('SELECT email FROM users WHERE site_id = ? AND role = ?').get(s.id, 'client'))?.email ?? '',
+    product_count: (await db.prepare('SELECT COUNT(*) AS n FROM products WHERE site_id = ?').get(s.id)).n,
+  })));
   res.json(out);
 });
 
-adminRouter.post('/clients', requireAuth, requireOwner, (req, res) => {
+adminRouter.post('/clients', requireAuth, requireOwner, async (req, res) => {
   const slug = cell(req.body?.slug).toLowerCase();
   const name = cell(req.body?.name);
   const allowed_origin = cell(req.body?.allowed_origin);
@@ -119,21 +119,20 @@ adminRouter.post('/clients', requireAuth, requireOwner, (req, res) => {
   else if (!/^https?:\/\/[^/\s]+$/.test(allowed_origin)) errors.allowed_origin = 'Origin must be scheme+host only, no trailing slash (e.g. https://example.com)';
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Valid email is required';
   if (password.length < 8) errors.password = 'Password must be at least 8 characters';
-  if (db.prepare('SELECT id FROM sites WHERE slug = ?').get(slug)) errors.slug = `A site with slug "${slug}" already exists`;
-  if (db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email)) errors.email = `A user with email "${email}" already exists`;
+  if (await db.prepare('SELECT id FROM sites WHERE slug = ?').get(slug)) errors.slug = `A site with slug "${slug}" already exists`;
+  if (await db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email)) errors.email = `A user with email "${email}" already exists`;
   if (hasErrors(errors)) return res.status(400).json({ error: 'validation_failed', fields: errors });
 
-  const create = db.transaction(() => {
-    const siteId = db.prepare('INSERT INTO sites (slug, name, allowed_origin, is_active) VALUES (?, ?, ?, 1)').run(slug, name, allowed_origin).lastInsertRowid;
-    db.prepare('INSERT INTO users (site_id, email, password_hash, role) VALUES (?, ?, ?, ?)').run(siteId, email, hashPassword(password), 'client');
-    return siteId;
+  const siteId = await db.transaction(async (t) => {
+    const site = await t.run('INSERT INTO sites (slug, name, allowed_origin, is_active) VALUES (?, ?, ?, 1)', slug, name, allowed_origin);
+    await t.run('INSERT INTO users (site_id, email, password_hash, role) VALUES (?, ?, ?, ?)', site.lastInsertRowid, email, hashPassword(password), 'client');
+    return site.lastInsertRowid;
   });
-  const siteId = create();
-  res.status(201).json({ ok: true, site: db.prepare('SELECT * FROM sites WHERE id = ?').get(siteId) });
+  res.status(201).json({ ok: true, site: await db.prepare('SELECT * FROM sites WHERE id = ?').get(siteId) });
 });
 
-adminRouter.put('/clients/:id', requireAuth, requireOwner, (req, res) => {
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+adminRouter.put('/clients/:id', requireAuth, requireOwner, async (req, res) => {
+  const site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
   if (!site) return res.status(404).json({ error: 'site_not_found' });
 
   const errors = {};
@@ -154,7 +153,7 @@ adminRouter.put('/clients/:id', requireAuth, requireOwner, (req, res) => {
   }
   if ('email' in req.body && cell(req.body.email)) {
     const email = cell(req.body.email).toLowerCase();
-    const clash = db.prepare('SELECT id FROM users WHERE lower(email) = ? AND site_id != ?').get(email, site.id);
+    const clash = await db.prepare('SELECT id FROM users WHERE lower(email) = ? AND site_id != ?').get(email, site.id);
     if (clash) errors.email = 'Email already in use';
     updates.email = email;
   }
@@ -168,15 +167,15 @@ adminRouter.put('/clients/:id', requireAuth, requireOwner, (req, res) => {
   const cols = Object.keys(updates);
   const siteCols = cols.filter((c) => c !== 'password_hash' && c !== 'email');
   if (siteCols.length) {
-    db.prepare(`UPDATE sites SET ${siteCols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`)
+    await db.prepare(`UPDATE sites SET ${siteCols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`)
       .run(...siteCols.map((c) => updates[c]), site.id);
   }
   const userCols = cols.filter((c) => c === 'password_hash' || c === 'email');
   if (userCols.length) {
-    db.prepare(`UPDATE users SET ${userCols.map((c) => `${c} = ?`).join(', ')} WHERE site_id = ? AND role = 'client'`)
+    await db.prepare(`UPDATE users SET ${userCols.map((c) => `${c} = ?`).join(', ')} WHERE site_id = ? AND role = 'client'`)
       .run(...userCols.map((c) => updates[c]), site.id);
   }
-  const fresh = db.prepare('SELECT * FROM sites WHERE id = ?').get(site.id);
+  const fresh = await db.prepare('SELECT * FROM sites WHERE id = ?').get(site.id);
   res.json({ ok: true, site: { ...fresh, is_active: fresh.is_active ? 'TRUE' : 'FALSE' } });
 });
 
@@ -184,14 +183,14 @@ adminRouter.put('/clients/:id', requireAuth, requireOwner, (req, res) => {
 
 adminRouter.use(requireAuth);
 
-function resolveSiteId(req, res) {
+async function resolveSiteId(req, res) {
   if (req.session.site) return req.session.site;
   const q = req.query.site ? parseInt(String(req.query.site), 10) : NaN;
   if (!Number.isFinite(q)) {
     res.status(400).json({ error: 'site_required', message: 'Owner requests must include ?site=<site id>' });
     return null;
   }
-  const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(q);
+  const site = await db.prepare('SELECT id FROM sites WHERE id = ?').get(q);
   if (!site) { res.status(404).json({ error: 'site_not_found' }); return null; }
   return site.id;
 }
@@ -211,73 +210,73 @@ function getRow(col, siteId, id) {
   const cols = col.kind === 'kv'
     ? 'id, key, value'
     : ['id', ...col.fields.map((f) => f.name)].join(', ');
-  return db.prepare(`SELECT ${cols} FROM ${col.table} WHERE site_id = ? AND id = ?`).get(siteId, id) ?? null;
+  return db.prepare(`SELECT ${cols} FROM ${col.table} WHERE site_id = ? AND id = ?`).get(siteId, id);
 }
 
-adminRouter.get('/:collection', (req, res) => {
+adminRouter.get('/:collection', async (req, res) => {
   const { collection } = req.params;
   if (!isCollection(collection)) return res.status(404).json({ error: 'unknown_collection' });
-  const siteId = resolveSiteId(req, res);
+  const siteId = await resolveSiteId(req, res);
   if (siteId === null) return;
-  res.json(listRows(COLLECTIONS[collection], siteId));
+  res.json(await listRows(COLLECTIONS[collection], siteId));
 });
 
-adminRouter.post('/:collection', (req, res) => {
+adminRouter.post('/:collection', async (req, res) => {
   const { collection } = req.params;
   if (!isCollection(collection)) return res.status(404).json({ error: 'unknown_collection' });
-  const siteId = resolveSiteId(req, res);
+  const siteId = await resolveSiteId(req, res);
   if (siteId === null) return;
 
   const col = COLLECTIONS[collection];
   const data = sanitizeRow(collection, req.body ?? {});
-  const { errors, warnings } = validateRow(collection, data, { db, siteId });
+  const { errors, warnings } = await validateRow(collection, data, { db, siteId });
   if (hasErrors(errors)) return res.status(400).json({ error: 'validation_failed', fields: errors, warnings });
 
   let id;
   if (col.kind === 'kv') {
-    db.prepare(`INSERT INTO ${col.table} (site_id, key, value) VALUES (?, ?, ?)
+    await db.prepare(`INSERT INTO ${col.table} (site_id, key, value) VALUES (?, ?, ?)
       ON CONFLICT(site_id, key) DO UPDATE SET value = excluded.value`)
       .run(siteId, data.key, data.value ?? '');
-    id = db.prepare(`SELECT id FROM ${col.table} WHERE site_id = ? AND key = ?`).get(siteId, data.key).id;
+    id = (await db.prepare(`SELECT id FROM ${col.table} WHERE site_id = ? AND key = ?`).get(siteId, data.key)).id;
   } else {
     const names = Object.keys(data);
     if (!names.length) return res.status(400).json({ error: 'empty_row' });
     const placeholders = names.map(() => '?').join(', ');
-    id = db.prepare(`INSERT INTO ${col.table} (site_id, ${names.join(', ')}) VALUES (?, ${placeholders})`)
-      .run(siteId, ...names.map((n) => data[n])).lastInsertRowid;
+    id = (await db.prepare(`INSERT INTO ${col.table} (site_id, ${names.join(', ')}) VALUES (?, ${placeholders})`)
+      .run(siteId, ...names.map((n) => data[n]))).lastInsertRowid;
   }
-  res.status(201).json({ ok: true, id, row: getRow(col, siteId, id), warnings });
+  res.status(201).json({ ok: true, id, row: await getRow(col, siteId, id), warnings });
 });
 
-adminRouter.get('/:collection/:id', (req, res) => {
+adminRouter.get('/:collection/:id', async (req, res) => {
   const { collection } = req.params;
   if (!isCollection(collection)) return res.status(404).json({ error: 'unknown_collection' });
-  const siteId = resolveSiteId(req, res);
+  const siteId = await resolveSiteId(req, res);
   if (siteId === null) return;
-  const row = getRow(COLLECTIONS[collection], siteId, req.params.id);
+  const row = await getRow(COLLECTIONS[collection], siteId, req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   res.json(row);
 });
 
-adminRouter.put('/:collection/:id', (req, res) => {
+adminRouter.put('/:collection/:id', async (req, res) => {
   const { collection } = req.params;
   if (!isCollection(collection)) return res.status(404).json({ error: 'unknown_collection' });
-  const siteId = resolveSiteId(req, res);
+  const siteId = await resolveSiteId(req, res);
   if (siteId === null) return;
 
   const col = COLLECTIONS[collection];
-  const existing = getRow(col, siteId, req.params.id);
+  const existing = await getRow(col, siteId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
 
   const patch = sanitizeRow(collection, req.body ?? {});
   const data = { ...existing, ...patch };
   delete data.id;
-  const { errors, warnings } = validateRow(collection, data, { db, siteId, excludeId: Number(req.params.id) });
+  const { errors, warnings } = await validateRow(collection, data, { db, siteId, excludeId: Number(req.params.id) });
   if (hasErrors(errors)) return res.status(400).json({ error: 'validation_failed', fields: errors, warnings });
 
   if (col.kind === 'kv') {
     try {
-      db.prepare(`UPDATE ${col.table} SET key = ?, value = ? WHERE site_id = ? AND id = ?`)
+      await db.prepare(`UPDATE ${col.table} SET key = ?, value = ? WHERE site_id = ? AND id = ?`)
         .run(data.key, data.value ?? '', siteId, req.params.id);
     } catch (e) {
       if (String(e.message).includes('UNIQUE')) {
@@ -287,20 +286,20 @@ adminRouter.put('/:collection/:id', (req, res) => {
     }
   } else {
     const names = Object.keys(data);
-    db.prepare(`UPDATE ${col.table} SET ${names.map((n) => `${n} = ?`).join(', ')} WHERE site_id = ? AND id = ?`)
+    await db.prepare(`UPDATE ${col.table} SET ${names.map((n) => `${n} = ?`).join(', ')} WHERE site_id = ? AND id = ?`)
       .run(...names.map((n) => data[n]), siteId, req.params.id);
   }
-  res.json({ ok: true, row: getRow(col, siteId, req.params.id), warnings });
+  res.json({ ok: true, row: await getRow(col, siteId, req.params.id), warnings });
 });
 
-adminRouter.delete('/:collection/:id', (req, res) => {
+adminRouter.delete('/:collection/:id', async (req, res) => {
   const { collection } = req.params;
   if (!isCollection(collection)) return res.status(404).json({ error: 'unknown_collection' });
-  const siteId = resolveSiteId(req, res);
+  const siteId = await resolveSiteId(req, res);
   if (siteId === null) return;
   const col = COLLECTIONS[collection];
-  const existing = getRow(col, siteId, req.params.id);
+  const existing = await getRow(col, siteId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
-  db.prepare(`DELETE FROM ${col.table} WHERE site_id = ? AND id = ?`).run(siteId, req.params.id);
+  await db.prepare(`DELETE FROM ${col.table} WHERE site_id = ? AND id = ?`).run(siteId, req.params.id);
   res.json({ ok: true });
 });

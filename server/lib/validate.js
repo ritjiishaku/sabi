@@ -27,7 +27,7 @@ export function sanitizeRow(collection, input) {
   return out;
 }
 
-export function validateRow(collection, data, { db, siteId, excludeId = null }) {
+export async function validateRow(collection, data, { db, siteId, excludeId = null }) {
   const col = COLLECTIONS[collection];
   const errors = {};
   const warnings = [];
@@ -63,14 +63,14 @@ export function validateRow(collection, data, { db, siteId, excludeId = null }) 
   }
 
   if (collection === 'sales_reps' && data.rep_id) {
-    const clash = db
+    const clash = await db
       .prepare(`SELECT id FROM ${col.table} WHERE site_id = ? AND lower(rep_id) = lower(?) AND id != ?`)
       .get(siteId, data.rep_id, excludeId ?? -1);
     if (clash) errors.rep_id = `Rep ID "${data.rep_id}" already exists for this site`;
   }
 
   if (collection === 'products' && data.name) {
-    const clash = db
+    const clash = await db
       .prepare(`SELECT id FROM ${col.table} WHERE site_id = ? AND lower(name) = lower(?) AND id != ?`)
       .get(siteId, data.name, excludeId ?? -1);
     if (clash) {
@@ -84,7 +84,7 @@ export function validateRow(collection, data, { db, siteId, excludeId = null }) 
   if (col.kind !== 'kv' && collection !== 'products' && !(col.uniqueBy?.length) && col.dedupeKey?.length) {
     const conds = col.dedupeKey.map((k) => `COALESCE(${k}, '') = ?`).join(' AND ');
     const vals = col.dedupeKey.map((k) => data[k] ?? '');
-    const clash = db
+    const clash = await db
       .prepare(`SELECT id FROM ${col.table} WHERE site_id = ? AND ${conds} AND id != ?`)
       .get(siteId, ...vals, excludeId ?? -1);
     if (clash) {

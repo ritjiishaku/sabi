@@ -33,6 +33,53 @@ equivalent and the reference for every value.
 
 ---
 
+## Vercel + Turso — recommended for a serverless, low-ops setup
+
+Vercel's filesystem is **ephemeral and read-only at request time**, so the local
+SQLite file cannot be used. Instead the app talks to a remote [Turso](https://turso.tech)
+database (libSQL) — same SQL, same code, just a network connection. `vercel.json`
+rewrites every path to the `api/index.js` serverless function (static files under
+`public/` are still served by Vercel's CDN first).
+
+1. **Create the database** (install the [Turso CLI](https://docs.turso.tech/cli/installation) first):
+
+   ```bash
+   turso db create sabi
+   turso db show sabi --url          # -> TURSO_DATABASE_URL (libsql://…)
+   turso db tokens create sabi       # -> TURSO_AUTH_TOKEN
+   ```
+
+2. **Deploy the repo to Vercel** (import it in the dashboard, or `vercel`). No
+   build command is needed — Vercel installs deps and bundles `api/index.js`.
+
+3. **Set environment variables** in Vercel → Project → Settings → Environment
+   Variables (Production + Preview):
+
+   | Variable | Value |
+   |---|---|
+   | `TURSO_DATABASE_URL` | the `libsql://…` URL from step 1 |
+   | `TURSO_AUTH_TOKEN` | the token from step 1 |
+   | `HMAC_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
+   | `OWNER_EMAIL` / `OWNER_PASSWORD` | owner bootstrap login (strong) |
+   | `NODE_ENV` | `production` (marks the session cookie `Secure`) |
+   | `BRAND_NAME` | optional, e.g. `Sabi CMS` |
+
+4. **Redeploy** so the new env vars take effect. On the first request the schema
+   and owner account are created automatically (`migrate` runs at cold start).
+   Verify `https://<project>.vercel.app/health`.
+
+5. **Create the Gift by VF client** at `/admin/login.html` (step 9 below) and run
+   the storefront cutover (steps 10-11).
+
+6. **Backups.** Turso keeps point-in-time history; take an explicit portable dump
+   with `npm run backup` (writes a portable SQL dump, encrypted when
+   `BACKUP_PASSPHRASE` is set). Run it from a machine that has the Turso env
+   vars set.
+
+> Note: the local SQLite file remains the default for dev and tests. Setting
+> `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` switches the app to remote mode and
+> `DB_PATH` is ignored.
+
 ## Managed container (Fly.io) — recommended, lowest ops
 
 `Dockerfile` + `fly.toml` run the same app as one always-on machine with a
@@ -79,11 +126,12 @@ The same image runs on Railway, Render, or any Docker host — mount a volume at
 
    ```bash
    fly ssh console -u node -C "cd /app && node scripts/backup.mjs"
-   fly sftp get /data/backups/<file>.db.enc
+   fly sftp get /data/backups/<file>.sql.enc
    ```
 
-   Restore with `node scripts/backup.mjs --decrypt <file>.db.enc` after copying
-   the plaintext back to `DB_PATH`. Keep a copy somewhere other than Fly.
+   The dump is a portable SQL file; restore with
+   `node scripts/backup.mjs --decrypt <file>.sql.enc` and replay it against the
+   target database. Keep a copy somewhere other than Fly.
 
 7. **Rollback:** `fly releases` then `fly releases rollback <version>`. The
    volume (and SQLite file) is untouched by deploys.
@@ -129,8 +177,9 @@ server over a managed host.
 - A VPS (1 vCPU / 1 GB RAM is enough) with a public IP and sudo access.
 - A DNS **A record** for `cms.example.com` → the VPS IP (or AAAA for IPv6).
 - Ports 80 and 443 open to the internet (Caddy needs 80 for TLS issuance).
-- Node.js 18+ (20 LTS recommended). `better-sqlite3` builds natively, so a C
-  toolchain is required if no prebuilt binary is available.
+- Node.js 18+ (20 LTS recommended). `@libsql/client` ships prebuilt binaries for
+  common platforms; a C toolchain (`python3`, `make`, `g++`) is only needed if it
+  must compile from source. Not needed when using a remote Turso database.
 - The intended production `.env` values on hand (see step 3).
 
 ## 1. Base packages

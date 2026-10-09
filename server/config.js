@@ -40,6 +40,8 @@ export const config = {
   port: parseInt(env.PORT || '3000', 10),
   brandName: env.BRAND_NAME || 'Sabi CMS',
   dbPath: path.resolve(root, env.DB_PATH || './data/cms.db'),
+  tursoUrl: env.TURSO_DATABASE_URL || '',
+  tursoAuthToken: env.TURSO_AUTH_TOKEN || '',
   hmacSecret: required('HMAC_SECRET'),
   ownerEmail: env.OWNER_EMAIL || '',
   ownerPassword: env.OWNER_PASSWORD || '',

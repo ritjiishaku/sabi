@@ -1,17 +1,21 @@
-const buckets = new Map();
+import { db } from '../db.js';
 
-export function hit(key, limit, windowMs) {
+/*
+ * Fixed-window rate limiter, stored in the database so it holds across every
+ * serverless instance (the old in-memory Map was per-process and useless on
+ * Vercel). One atomic upsert both increments the bucket and reports its count.
+ */
+export async function hit(key, limit, windowMs) {
   const now = Date.now();
-  const b = buckets.get(key);
-  if (!b || now > b.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
-  }
-  b.count += 1;
-  return b.count > limit;
+  const resetAt = now + windowMs;
+  const row = await db
+    .prepare(
+      `INSERT INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         count = CASE WHEN rate_limits.reset_at < ? THEN 1 ELSE rate_limits.count + 1 END,
+         reset_at = CASE WHEN rate_limits.reset_at < ? THEN ? ELSE rate_limits.reset_at END
+       RETURNING count`
+    )
+    .get(key, resetAt, now, now, resetAt);
+  return Number(row?.count ?? 0) > limit;
 }
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, b] of buckets) if (now > b.resetAt) buckets.delete(k);
-}, 60_000).unref();

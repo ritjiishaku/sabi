@@ -7,7 +7,8 @@ content through a stable, string-only JSON contract. The first integration is
 [`DESIGN.md`](./DESIGN.md) for the design-token system.
 
 - **Runtime:** Node.js + Express, no build step
-- **Database:** SQLite (`better-sqlite3`, WAL)
+- **Database:** SQLite via libSQL (`@libsql/client`) — a local file in dev, or a
+  remote [Turso](https://turso.tech) database in production/serverless
 - **Admin UI:** vanilla HTML/CSS/JS served by Express
 - **Auth:** bcrypt password hashes + HMAC-signed HttpOnly session cookie
 
@@ -18,7 +19,9 @@ Docs: [`PRD.md`](./PRD.md) · [`DESIGN.md`](./DESIGN.md) ·
 ## Requirements
 
 - Node.js 20 LTS (18+ works; global `fetch` is required)
-- A C toolchain for `better-sqlite3` native build (`python3`, `make`, `g++`)
+- A C toolchain (`python3`, `make`, `g++`) only if the native `@libsql/client`
+  binary needs compiling — prebuilt binaries cover common platforms. Irrelevant
+  when using a remote Turso DB.
 
 ## Quick start
 
@@ -49,7 +52,9 @@ without starting the server).
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `PORT` | no | `3000` | HTTP listen port |
-| `DB_PATH` | no | `./data/cms.db` | SQLite file path |
+| `DB_PATH` | no | `./data/cms.db` | Local SQLite file path (ignored when Turso is set) |
+| `TURSO_DATABASE_URL` | no | — | Remote libSQL URL (`libsql://…`) — required on Vercel |
+| `TURSO_AUTH_TOKEN` | no | — | Turso auth token (set together with the URL) |
 | `BRAND_NAME` | no | `Sabi CMS` | Brand shown in the UI and `/health` |
 | `HMAC_SECRET` | **yes** | — | Signs session cookies (long random string) |
 | `OWNER_EMAIL` | yes¹ | — | Owner bootstrap login |
@@ -72,12 +77,14 @@ without starting the server).
 | `npm run import` | Import all 9 collections from the Google Sheet (idempotent) |
 | `npm run smoke` | End-to-end suite; imports `scripts/fixtures/` by default (isolated DB, port 3999) |
 | `npm run contract` | Self-contained PRD §7 contract checks, no network (port 3998) |
-| `npm run backup` | Encrypted SQLite snapshot with retention (`scripts/backup.mjs`) |
+| `npm run backup` | Portable SQL dump (encrypted if `BACKUP_PASSPHRASE` set) with retention |
 
 ## Project layout
 
 ```
 Dockerfile          container image (Fly.io / Railway / Render / plain Docker)
+vercel.json         Vercel rewrites + function config (serverless path)
+api/index.js        Vercel serverless entry (re-exports the Express app)
 fly.toml            Fly.io config: always-on machine + /data volume
 railway.json        Railway build/healthcheck config
 render.yaml         Render blueprint (Docker + /data disk)
@@ -85,7 +92,7 @@ render.yaml         Render blueprint (Docker + /data disk)
 server/
   app.js            Express app: routes, static, error handling
   config.js         .env loading + typed config
-  db.js             better-sqlite3 connection (WAL, foreign keys)
+  db.js             async libSQL client (local file or remote Turso)
   migrate.js        schema DDL + owner bootstrap
   collections.js    single source of truth for collections, fields, settings keys
   lib/              auth, normalize, slugify, validate, ratelimit
@@ -176,11 +183,14 @@ $env:SMOKE_LIVE=1; npm run smoke # PowerShell
 
 ## Deployment
 
-Two supported paths, both in [`docs/DEPLOY.md`](./docs/DEPLOY.md):
+Three supported paths, all in [`docs/DEPLOY.md`](./docs/DEPLOY.md):
 
-- **Managed container (recommended, lowest ops):** `Dockerfile` + `fly.toml` run
-  the app as one always-on machine with a persistent volume — Fly handles TLS,
-  host patching, and deploy/rollback. The same image runs on Railway/Render.
+- **Vercel + Turso (serverless, no server to babysit):** deploy `api/index.js`
+  to Vercel and point `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` at a Turso
+  database. Vercel's filesystem is ephemeral, so a remote DB is required.
+- **Managed container:** `Dockerfile` + `fly.toml` run the app as one always-on
+  machine with a persistent volume — Fly handles TLS, host patching, and
+  deploy/rollback. The same image runs on Railway/Render.
 - **Plain VPS:** `deploy/bootstrap.sh` provisions Node, PM2, Caddy (TLS),
   migration, and nightly backups on a fresh Ubuntu/Debian server.
 
@@ -198,7 +208,8 @@ The VPS pieces it installs:
 - [ ] `NODE_ENV=production` — marks session cookies `Secure`
 - [ ] `HMAC_SECRET` — fresh, long, random; **not** the dev value
 - [ ] `OWNER_EMAIL` / `OWNER_PASSWORD` — strong; rotate after first login
-- [ ] `DB_PATH` → an absolute path on a persistent disk (WAL needs write access)
+- [ ] `DB_PATH` → an absolute path on a persistent disk (WAL needs write access);
+      **or** `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` on serverless hosts
 - [ ] `BACKUP_PASSPHRASE` — set so off-box snapshots are encrypted
 - [ ] `BACKUP_DIR` — a directory outside the app that leaves the box
 - [ ] `.env` is **not** committed and not served (verified by `npm run smoke`)

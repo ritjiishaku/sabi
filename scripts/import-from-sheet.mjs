@@ -76,13 +76,13 @@ async function fetchTab(tabName) {
 
 /* ---------------------------- main ---------------------------- */
 
-function ensureSite() {
-  let site = db.prepare('SELECT * FROM sites WHERE slug = ?').get(SITE_SLUG);
+async function ensureSite() {
+  let site = await db.prepare('SELECT * FROM sites WHERE slug = ?').get(SITE_SLUG);
   if (!site) {
     const origin = process.env.SHEET_ORIGIN || 'https://vf-gift-shop.vercel.app';
-    const id = db.prepare('INSERT INTO sites (slug, name, allowed_origin, is_active) VALUES (?, ?, ?, 1)')
-      .run(SITE_SLUG, 'Gift by VF', origin).lastInsertRowid;
-    site = db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
+    const id = (await db.prepare('INSERT INTO sites (slug, name, allowed_origin, is_active) VALUES (?, ?, ?, 1)')
+      .run(SITE_SLUG, 'Gift by VF', origin)).lastInsertRowid;
+    site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
     console.log(`[import] created site "${SITE_SLUG}" (origin: ${origin})`);
   }
   return site;
@@ -102,7 +102,7 @@ function dedupe(records, columns) {
 }
 
 async function main() {
-  const site = ensureSite();
+  const site = await ensureSite();
   const report = [];
   let totalImported = 0;
   let totalRemoved = 0;
@@ -134,7 +134,7 @@ async function main() {
       : dedupe(records, known);
 
     // Clear previous rows first so validation (unique/duplicate checks) runs against a clean slate — keeps re-imports idempotent
-    db.prepare(`DELETE FROM ${col.table} WHERE site_id = ?`).run(site.id);
+    await db.prepare(`DELETE FROM ${col.table} WHERE site_id = ?`).run(site.id);
 
     const warnings = [];
     const insertRows = [];
@@ -146,24 +146,24 @@ async function main() {
         if (f === 'display_order') data[f] = v === '' ? null : (Number.isFinite(parseInt(v, 10)) ? String(parseInt(v, 10)) : v);
         else data[f] = v;
       }
-      const { errors, warnings: w } = validateRow(name, data, { db, siteId: site.id });
+      const { errors, warnings: w } = await validateRow(name, data, { db, siteId: site.id });
       // Downgrade errors to warnings: the sheet is imported as-is (strings), fixes happen in admin
       for (const [field, msg] of Object.entries(errors)) warnings.push(`${col.label}: ${msg}`);
       for (const wmsg of w) warnings.push(`${col.label}: ${wmsg}`);
       insertRows.push(data);
     }
 
-    const tx = db.transaction(() => {
+    await db.transaction(async (t) => {
       if (col.kind === 'kv') {
-        const stmt = db.prepare(`INSERT INTO ${col.table} (site_id, key, value) VALUES (?, ?, ?)`);
-        for (const d of insertRows) stmt.run(site.id, d.key, d.value ?? '');
+        for (const d of insertRows) {
+          await t.run(`INSERT INTO ${col.table} (site_id, key, value) VALUES (?, ?, ?)`, site.id, d.key, d.value ?? '');
+        }
       } else if (insertRows.length) {
         const cols = Object.keys(insertRows[0]).filter((c) => insertRows[0][c] !== undefined);
-        const stmt = db.prepare(`INSERT INTO ${col.table} (site_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})`);
-        for (const d of insertRows) stmt.run(site.id, ...cols.map((c) => d[c] ?? null));
+        const sql = `INSERT INTO ${col.table} (site_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})`;
+        for (const d of insertRows) await t.run(sql, site.id, ...cols.map((c) => d[c] ?? null));
       }
     });
-    tx();
 
     totalImported += insertRows.length;
     totalRemoved += removed;

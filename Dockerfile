@@ -3,7 +3,7 @@
 # Sabi CMS — container image. Runs on Fly.io, Railway, Render, or any Docker host.
 # The SQLite database and backups live on a mounted volume at /data (see fly.toml).
 
-# ---- build stage: compile better-sqlite3 if no prebuilt binary matches ----
+# ---- build stage: compile native deps (@libsql/client) if no prebuilt binary matches ----
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 RUN apt-get update \

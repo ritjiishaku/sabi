@@ -2,7 +2,9 @@ node_modules/
 *.db
 *.db-wal
 *.db-shm
+*.sql
 .env
+.vercel/
 npm-debug.log*
 backups/
 logs/
